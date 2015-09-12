@@ -1,0 +1,66 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace OrderedModules
+{
+    using System.IO;
+
+    /*
+    using Trace.Api.Common.TP;
+    
+     Classified: 
+     Using Trace fields and laiberies
+     
+    */
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            var tpPath = @"\\ger\ec\proj\ha\mmgbd\Class_PDE1\users\ctourman\EVG\D0\28C\MV_SHMOO";
+
+            CmtTestProgramParserManager p = new CmtTestProgramParserManager();
+
+            // pass as parameter
+            var firstBom = p.GetTestProgramBoms(tpPath).First();
+
+            var tp = p.ParseTestProgram(tpPath, null, EnumTpParserFlag.Basic, firstBom.Key);
+
+
+            Module[] orderedModules = GetOrderedModules(tp).ToArray();
+
+            var moduleNames = string.Join(Environment.NewLine, orderedModules.Select(m => m.Name));
+
+            File.WriteAllText(@"C:\Users\isirotin\Desktop\sort\moduleNames.txt", moduleNames);
+        }
+
+        private static IEnumerable<Module> GetOrderedModules(TestProgram tp)
+        {
+            /*   
+        
+             Classified:
+             - extract main flow of spesific testProgram
+             - get fist module in MAIN flow
+             
+             */
+        }
+
+        private static Module GetNextModule(Flow mainFlow, TpItemBase module)
+        {
+            var nextItem = module;
+            while (nextItem != null)
+            {
+                // TODO: change 1 to const in TP static model
+                var port = nextItem.Ports.GetPortOrNull(1);
+                nextItem = port == null ? null : port.Destination;
+                if (nextItem != null && nextItem.Parent == mainFlow && nextItem is Module)
+                    break;
+            }
+
+            return nextItem as Module;
+        }  
+    }
+}

@@ -1,0 +1,87 @@
+﻿//change output folder to analysis different lot numbers
+FolderPath =  "L:\Class\users\SPF\Cross-TP content dependency mapping\FirstStepAnalysis\Numeric values\test time_per Test program\test_time_Output_SKLDTJD42P0CL70IP0Q31419\test_time1\";
+dt = Current Data Table();
+dt << Clear Column Selection;
+dt << Clear Row States;
+dt_subset = dt  << Subset(Output Table( "SubsetTable" ), All rows, columns(:visual_id, :lot, :operation, :program_or_bi_recipe_name, :test_time, :fbin, :test_name, :pr_measurement_value, :cr_measurement_value ));
+
+//add Module column:
+dt_subset << new column ("First_Module", Character);
+for(i=1,i<=nrows(dt_subset),i++,
+    if(Contains(column (dt_subset, 7)[i],"PCH"),First_Module[i]="PCH",
+        if(Contains(column (dt_subset, 7)[i],"GFX"),First_Module[i]="GT"/*GFX*/,
+            if(Contains(column (dt_subset, 7)[i],"IALOGIC") | Contains(column (dt_subset, 7)[i],"RTMB") | Contains(column (dt_subset, 7)[i],"BF") | Contains(column (dt_subset, 7)[i],"BFUPS"),
+                    First_Module[i]="IAFUNC",
+                if(Contains(column (dt_subset, 7)[i],"IASCAN"),First_Module[i]="IASCAN",
+                    if(Contains(column (dt_subset, 7)[i],"PLL"),First_Module[i]="PLL",
+                        if(Contains(column (dt_subset, 7)[i],"IO"),First_Module[i]="IO",
+                            if(Contains(column (dt_subset, 7)[i],"IDV"),First_Module[i]="IDV",
+                                    if(Contains(column (dt_subset, 7)[i],"FUSE"),First_Module[i]="FUSE",
+                                        if(Contains(column (dt_subset, 7)[i], "IAARRAY"), First_Module[i] = "IACACHE",
+                                            if(Contains(column (dt_subset, 7)[i],"THERMAL") | Contains(column (dt_subset, 7)[i],"POD") | Contains(column (dt_subset, 7)[i],"POWER") | 
+                                                Contains(column (dt_subset, 7)[i],"IR"),First_Module[i]="POWER-THERMAL",/*All other options*/First_Module[i]="TPGENERAL"                              
+        ); ); ); ); ); ); ); ); ); ); );
+//sub by Module:
+summarize (Module_list = by(First_Module));
+numModule = nitems(Module_list);
+Module_count = 1;
+for ( i = 2, i<= numModule, i++,
+	Module_count_char = char(Module_count);
+	Module_count++;
+	dt_subset << select where (contains(:First_Module,Module_list[i]));
+	Module_name = Module_list[i];
+	Sub_byModule = dt_subset << Subset( Output Table( "Sub_byModule" ), Selected Rows( 1 ), Selected columns only( 0 ));
+	//view per each Module:
+	unit_summary_meanTT= Sub_byModule << Summary( Group( :visual_id, :First_Module ),Mean( :test_time ),output table name( "unit_summary_meanTT" ));
+	/*View1*/Module_test_time_col_chart = Distribution(
+	Stack( 1 ), Continuous Distribution(Column( :Name( "Mean(test_time)" ) ), Horizontal Layout( 1 ),	Vertical( 0 ),
+		Count Axis( 1 ), Outlier Box Plot( 0 ),	Normal Quantile Plot( 0 )));
+	Module_test_time_col_chart_jpeg = Module_test_time_col_chart << report;
+	/*View2*/ Module_test_time_XY_chart = Bivariate( Y( :N Rows ), X( :Name( "Mean(test_time)" ) ) );
+	Module_test_time_XY_chart_jpeg = Module_test_time_XY_chart << report;
+	Module_dist_report = new window (Module_name||" Distrebution");
+	Module_dist_report << append (text_box1 = textbox("Module = "||Module_name||""));
+	text_box1 << set font size (15);
+	Module_dist_report << append (Module_test_time_XY_chart_jpeg);
+	Module_dist_report << append (Module_test_time_col_chart_jpeg);
+	Module_dist_report << append (tablebox(unit_summary_meanTT << get as report));
+	Module_dist_report << save picture (FolderPath||""||Module_name||"_ 1. full Module Distrebution.jpeg",jpeg);
+	close (unit_summary_meanTT, nosave);
+	Module_dist_report << close window;
+	
+	//sub by test_name
+	summarize (test_name_list = by(test_name));
+	numtest_name = nitems(test_name_list);
+	file_count = 2;
+	for ( j = 1, j <= numtest_name, j++,
+		file_count_char = char(file_count);
+		Sub_byModule << select where (contains(:test_name,test_name_list[j]));
+		test_name_name = test_name_list[j];
+		Sub_bytestname = Sub_byModule << Subset( Output Table( "Sub_bytestname" ), Selected Rows( 1 ), Selected columns only( 0 ));
+		//view per each test_name:
+		unit_summary_meanTT= Sub_bytestname << Summary( Group( :visual_id ),Mean( :test_time ),output table name( "unit_summary_meanTT" ));
+		/*View1*/testname_test_time_col_chart = Distribution(
+		Stack( 1 ), Continuous Distribution(Column( :Name( "Mean(test_time)" ) ), Horizontal Layout( 1 ),	Vertical( 0 ),
+			Count Axis( 1 ), Outlier Box Plot( 0 ),	Normal Quantile Plot( 0 )));
+		testname_test_time_col_chart_jpeg = testname_test_time_col_chart << report;
+		/*View2*/ testname_test_time_XY_chart = Bivariate( Y( :N Rows ), X( :Name( "Mean(test_time)" ) ) );
+		testname_test_time_XY_chart_jpeg = testname_test_time_XY_chart << report;
+		
+		char_count = char(file_count);
+		testname_dist_report = new window (Module_name||"-"||test_name_name||" __  Distrebution");
+		testname_dist_report << append (text_box1 = textbox("Module = "||Module_name||""));
+		text_box1 << set font size (15);
+		testname_dist_report << append (text_box = textbox("test name = "||test_name_name||""));
+		text_box << set font size (15);
+		testname_dist_report << append (testname_test_time_XY_chart_jpeg);
+		testname_dist_report << append (testname_test_time_col_chart_jpeg);
+		testname_dist_report << append (tablebox(unit_summary_meanTT << get as report));
+		testname_dist_report << save picture (FolderPath||Module_name||"_ "||file_count_char||". Distrebution.jpeg",jpeg);
+		file_count ++;
+		
+		close (unit_summary_meanTT, nosave);
+		testname_dist_report << close window;
+		close(Sub_bytestname,nosave);
+	);	//End for j
+	close (sub_byModule);
+); //End for i

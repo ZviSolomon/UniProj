@@ -1,0 +1,103 @@
+//change output folder to analysis different lot numbers
+FolderPath =  "L:\Class\users\SPF\Cross-TP content dependency mapping\FirstStepAnalysis\Output_SKLDTJD42P0CL70IP0Q31419\measurment\";
+dt = Current Data Table();
+dt << Clear Column Selection;
+dt << Clear Row States;
+dt_subset = dt  << Subset(Output Table( "SubsetTable" ), All rows, columns(:visual_id, :lot, :operation, :program_or_bi_recipe_name, :test_time, :fbin, :test_name, :pr_measurement_value, :cr_measurement_value ));
+
+/*pr_measurement*/
+	//select non missing values
+dt_subset << selectwhere (!(IsMissing(as column(pr_measurement_value))));
+dt_pr_measurement = dt_subset << Subset(Output Table("Subset_pr_measurement"), Selected Rows(1), columns(:visual_id, :lot, :operation, :program_or_bi_recipe_name, :test_time, :fbin, :test_name, :pr_measurement_value));
+
+/////////////////
+	//instability check per Test program
+summarize(TP_List = by(program_or_bi_recipe_name)); 
+numTP = nitems(TP_List);
+Summary_per_Units = dt_pr_measurement << Summary( Group( :visual_id ),Mean( :pr_measurement_value ),output table name( "Summary_per_Units" ));
+	// view 1:
+pr_measurement_col_chart = Distribution(
+	Stack( 1 ),
+	Weight( :N Rows ),
+	Continuous Distribution(
+		Column( :Name( "Mean(pr_measurement_value)" ) ),
+		Horizontal Layout( 1 ),
+		Vertical( 0 ),
+		Count Axis( 1 ),
+		Outlier Box Plot( 0 ),
+		Normal Quantile Plot( 0 ) 	));
+pr_measurement_col_chart << save picture (FolderPath || "pr_measurement Summary_col_chart.jpeg", jpeg);
+	// view 2:
+pr_measurment_XY_chart = Bivariate( Y( :N Rows ), X( :Name( "Mean(pr_measurement_value)" ) ) );
+pr_measurment_XY_chart << save picture (FolderPath || "pr_measurement Summary_XY_chart.jpeg", jpeg);
+/////////////////
+close(Summary_per_Units, no save);
+close(dt_pr_measurement, no save);
+
+
+/*cr_measurement_*/
+current data table (dt_subset);
+dt_subset << Clear Column Selection;
+dt_subset << Clear Row States;
+	//set cr_measurement_value to Numeric (to be able to do Summary Min/Max/Mean)
+column(dt_subset, 9) << Data Type (Numeric);
+	//select non missing values
+dt_subset << selectwhere (!(IsMissing(as column(cr_measurement_value))));
+dt_cr_measurement = dt_subset << Subset(Output Table("Subset_cr_measurement"), Selected Rows(1), columns(:visual_id, :lot, :operation, :program_or_bi_recipe_name, :test_time, :fbin, :test_name, :cr_measurement_value));
+Summary_per_Units = dt_cr_measurement << Summary( Group( :visual_id ),Mean( :cr_measurement_value ),output table name( "Summary_per_Units" ));
+
+/////////////////
+	//instability check per Test program
+	// view 1:
+cr_measurement_col_chart = Distribution(
+	Stack( 1 ),
+	Weight( :N Rows ),
+	Continuous Distribution(
+		Column( :Name( "Mean(cr_measurement_value)" ) ),
+		Horizontal Layout( 1 ),
+		Vertical( 0 ),
+		Count Axis( 1 ),
+		Outlier Box Plot( 0 ),
+		Normal Quantile Plot( 0 ),
+		Customize Summary Statistics ));
+cr_measurement_col_chart << save picture (FolderPath || "cr_measurement Summary_col_chart.jpeg", jpeg);
+	// view 2:
+cr_measurment_XY_chart = Bivariate( Y( :N Rows ), X( :Name( "Mean(cr_measurement_value)" ) ) );
+cr_measurment_XY_chart << save picture (FolderPath || "cr_measurement Summary_XY_chart.jpeg", jpeg);
+/////////////////
+
+
+close(Summary_per_Units, no save);
+close(dt_cr_measurement, no save);
+
+
+//test_time view
+current data table (dt_subset);
+dt_subset << Clear Column Selection;
+dt_subset << Clear Row States;
+	//select non missing values
+dt_subset << selectwhere (!(IsMissing(as column(test_time))));
+dt_test_time = dt_subset << Subset(Output Table("Subset_test_time"), Selected Rows(1), columns(:visual_id, :lot, :operation, :program_or_bi_recipe_name, :test_time, :fbin, :test_name));
+
+Summary_per_Units = dt_test_time << Summary( Group( :visual_id ), Mean( :test_time ),output table name( "Summary_per_Units" ));
+
+/////////////////
+	//instability check per Test program
+	// view 1:
+test_time_col_chart = Distribution(
+	Stack( 1 ),
+	Weight( :N Rows ),
+	Continuous Distribution(
+		Column( :Name( "Mean(test_time)" ) ),
+		Horizontal Layout( 1 ),
+		Vertical( 0 ),
+		Count Axis( 1 ),
+		Outlier Box Plot( 0 ),
+		Normal Quantile Plot( 0 ) ));
+test_time_col_chart << save picture (FolderPath || "test_time Summary_col_chart.jpeg", jpeg);
+	// view 2:
+test_time_XY_chart = Bivariate( Y( :N Rows ), X( :Name( "Mean(test_time)" ) ) );
+test_time_XY_chart << save picture (FolderPath || "test_time Summary_XY_chart.jpeg", jpeg);
+/////////////////
+close(Summary_per_Units, no save);
+close (dt_test_time, no save);

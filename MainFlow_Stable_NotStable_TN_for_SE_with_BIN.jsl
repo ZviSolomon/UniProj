@@ -1,0 +1,273 @@
+FolderPath = "L:\Class\users\SPF\CrossTP\FF_TestName_TP_SKL29EP1Q21538\stability experiment VG2\mainFlow_script\Results\";
+FolderPath1 = "L:\Class\users\SPF\CrossTP\FF_TestName_TP_SKL29EP1Q21538\stability experiment VG2\mainFlow_script\Results_tmp\";
+dt = current data table();
+dt << clear column selection;
+dt << Clear Row States;
+
+//check if we have more columns than we need
+for ( cc = ncols(dt), cc >= 1, cc--,
+	columnName = column(dt, cc) << get name;
+	if (columnName == "Lot" | columnName == "VisualId" | columnName == "Test" | columnName == "Port" | columnName == "Bin", ,
+		dt << delete column (column (dt, cc));
+	);
+);
+
+//Get all unit with Bin 1
+dt << select where (:Bin == 101);
+SubBin1 = dt << Subset(	Output Table( "SubBin1" ),	Selected Rows( 1 ),	Selected columns only( 0 ) );
+
+//create a char port column
+SubBin1 << new column ("Port_char", character);
+for ( r = 1, r <= nrows(SubBin1), r++,
+	column(SubBin1,6)[r] = char(column(SubBin1,4)[r]);
+);
+SubBin1 << delete column("Port");
+
+SummaryBy_vid = SubBin1 << Split(Split By( :Test ),Split( :Port_char ),Group( :VisualId, :Lot ),Output Table( "SummaryBy_vid" ));
+
+SummaryBy_vid << delete column("Bin");
+
+//add . where there are empty cells
+for ( c = 3, c < ncols(SummaryBy_vid), c++,
+	for ( r = 1, r <= nrows(SummaryBy_vid), r ++,
+		if (column (SummaryBy_vid, c )[r] == "", 
+			column (SummaryBy_vid, c )[r] = "."
+		);
+	);
+);
+
+SummaryBy_vid << save (FolderPath1||"tmp_1.Summary_port per VID and Lot of each testName - all units with Bin 1.jmp", jmp);
+
+summarize (vid_List = by(VisualId)); 
+numvid = nitems(vid_List);
+
+//create SummaryDT
+SummaryDT = new table("SummaryDT");
+SummaryDT << new column("vid", character);
+//add all test names as columna
+for ( tn = 3, tn <= ncols(SummaryBy_vid), tn++,
+	tn_column_name = column(SummaryBy_vid,tn) << get name;
+	SummaryDT << new column(tn_column_name, character);
+);
+
+//Summarize the results of passed units for each test
+for ( i = 1, i <= numvid, i++,
+	SummaryBy_vid << select where (:VisualId == vid_List[i]);
+	SubsetBy_vid = SummaryBy_vid << Subset(Output Table("SubsetBy_vid"), Selected Rows(1), Selected columns only(0));
+	SummaryDT << add row(1);
+	column(SummaryDT,1)[i] = vid_List[i];
+	for (tn = 3, tn <= ncols(SubsetBy_vid), tn ++,
+		SummaryByTN = SubsetBy_vid << Summary(Group( column(SubsetBy_vid, tn) ),output table name( "SummaryByTN" ));
+		test_port = "";
+		if (nrows(SummaryByTN) != 1,
+			//concatante results
+			for ( row = 1, row <= nrows(SummaryByTN), row++,
+				test_port = test_port || char(column(SummaryByTN,1)[row]) || "(" || char(column(SummaryByTN,2)[row]) || ")_";
+			);
+			,
+				test_port = column(SummaryByTN,1)[1];
+		);
+		column(SummaryDT,tn-1)[i] = test_port;
+		close (SummaryByTN, nosave);
+	);
+	close (SubsetBy_vid, nosave);
+);
+
+//sort each test if Stable/NotStable
+SummaryDT << add row(1);
+column(SummaryDT, 1)[nrows(SummaryDT)] = "Stable_NotStable";
+for ( c = 2, c <= ncols(SummaryDT), c++,
+	summarize (port_List = by(column(SummaryDT, c))); 
+	numport = nitems(port_List);
+	
+	stable_flag = 1; 	//Stable
+	for (po = 1, po <= numport, po++,
+		if (contains(port_List[po], "_"),
+			if (!contains(port_List[po],"."),
+				stable_flag = 0;
+			);
+		);
+	);	
+	if (stable_flag == 1, column(SummaryDT, c)[nrows(SummaryDT)] = "Stable", column(SummaryDT, c)[nrows(SummaryDT)] = "NotStable");
+);
+
+//create a new table: tabke is like SammaryDT but when rows becomes cols and cols becomes rows 
+reviewDT = new table("reviewDT");
+reviewDT << new column("TestName", character);
+for ( tn = 2, tn <= ncols(SummaryDT), tn++,
+	reviewDT << add rows(1);
+	TN_value = column(SummaryDT, tn) << get name();
+	column(reviewDT,1)[tn-1] = TN_value;
+);
+for ( vid = 1, vid <= numvid+1, vid++,
+	reviewDT << new column(column(SummaryDT,1)[vid], character);
+);
+for (c = 1, c < ncols(SummaryDT), c++,
+	for ( r = 1, r <= nrows(SummaryDT), r++,
+		column(reviewDT,r+1)[c] = column(SummaryDT,c+1)[r];
+	);
+);
+//add Module column for MO's
+reviewDT << new column ("Module", character);
+reviewDT << Move Selected Columns({"Module"}, to first);
+for ( r = 1, r <= nrows(reviewDT), r++,
+	column (reviewDT, 1)[r] = item (1, TestName[r], "::");
+);
+reviewDT << save (FolderPath1||"tmp_2.Combine_TestName_Port_Summary_details.jmp", jmp);
+
+// Save Stable Ports List
+reviewDT << select where (:Stable_NotStable == "Stable");
+StableTP = reviewDT << Subset( Output Table( "StableTP" ),Selected Rows( 1 ),Selected columns only( 0 ));
+StableTP << save (FolderPath1||"tmp_2.Stable_TestName_Port_Summary_details.jmp", jmp);
+//Final View for Pyton script - TN##Port
+Stable_list_for_Pyton = new table ("Stable_list_for_Pyton");
+Stable_list_for_Pyton << new column ("TestName_Port");
+for ( spi = 1, spi <= nrows(StableTP), spi++,
+	Stable_list_for_Pyton << add row(1);
+	port_value = column(StableTP, 3)[spi];
+	if (contains(port_value, "."),
+		port_value = item (3, port_value, "_(");
+	);
+	column(Stable_list_for_Pyton, 1)[nrows(Stable_list_for_Pyton)] = column(StableTP, 2)[spi] ||"##" || port_value;
+);
+close(StableTP, nosave);
+// Save Stable Ports List
+Stable_list_for_Pyton << save (FolderPath1||"tmp_3.Stable_Port.jmp", jmp);
+
+//save notStable port List
+reviewDT << select where (:Stable_NotStable == "NotStable");
+NotStableTP = reviewDT << Subset( Output Table( "NotStableTP" ),Selected Rows( 1 ),Selected columns only( 0 ));
+//color ports
+for ( c = 3, c <= ncols(NotStableTP), c++,
+	for ( r = 1, r <= nrows(NotStableTP), r++,
+		if (contains(column (NotStableTP,c)[r],"_") & !contains(column (NotStableTP,c)[r],"."), column(NotStableTP, c) << color cells(10,r),);
+	);
+);
+NotStableTP << save (FolderPath1||"tmp_2.NotStable_TestName_Port_Summary_details.jmp", jmp);
+final_report = new window ("Not Stable_summary", tablebox (NotStableTP << get as report));
+final_report << save picture (FolderPath1||"tmp_2.NotStable_TestName_Port_Summary_details_color_pic.jpg", jpg);
+final_report << close window;
+
+close (reviewDT, nosave);
+
+//////////////////////
+// Anlayze NotStable and deterimating port for NotStable tests
+//Table used: NotStableTP
+
+//Open new table that will show port we want to see
+NotStablePortSort = new table ("NotStablePortSort");
+NotStablePortSort << new column ("Module", character);
+NotStablePortSort << new column ("TestName", character);
+NotStablePortSort << new column ("Port_Disterbution", character);
+NotStablePortSort << add rows (nrows(NotStableTP));
+
+
+for ( ns = 1, ns <= nrows(NotStableTP), ns++,
+	// Add data to Port Sort table
+	column(NotStablePortSort, 1)[ns] = column(NotStableTP, 1)[ns];
+	column(NotStablePortSort, 2)[ns] = item(3, column(NotStableTP, 2)[ns], "::");
+	
+	portSummary = new table ("portSummary");
+	portSummary << new column ("portSummary", character);
+	//portSummary <<add rows (ncols(NotStableTP) -3);
+	
+	for (pu = 3, pu <= ncols(NotStableTP)-1, pu++,
+		portVar = column (NotStableTP, pu)[ns];
+		if (!contains(portVar, "_"),
+			for ( po = 1, po <= 10, po ++,
+				portSummary <<add rows (1);
+				column(portSummary,1)[nrows(portSummary)] = portVar;
+			);
+		, //ELSE
+			for ( po = 1, po <= 2, po++,
+				portVar_val = item (po, portVar, "_");
+				val = item (1, portVar_val, "(");
+				num_val = item (2, portVar_val, "()");
+				for ( numb = 1, numb <= num(num_val), numb ++,
+					portSummary <<add rows (1);
+					column(portSummary, 1)[nrows(portSummary)] = val;
+				);
+			);
+		);
+	);
+	NotStableSummaryPerTestName = portSummary << Summary(	Group( :portSummary ),	output table name( "NotStableSummaryPerTestName" ));
+	// IMPORTANAT! add Sort so high number is first
+	portDistrebution = "";
+	for ( pd = 1, pd <= nrows(NotStableSummaryPerTestName), pd++,
+		portDistrebution = portDistrebution||column(NotStableSummaryPerTestName,1)[pd]||"(";
+		portDistrebution = portDistrebution||char(column(NotStableSummaryPerTestName,2)[pd])||")_";
+	);
+	column (NotStablePortSort,3)[ns] = portDistrebution;
+	close (NotStableSummaryPerTestName, nosave);
+	close (PortSummary, nosave);	
+);
+close(NotStableTP, nosave);
+
+/*NotStablePortSort << new column ("Port_option1", character);
+NotStablePortSort << new column ("Port_option2", character);*/
+
+//////////////////////
+//NotStable logic
+// we will check the numbers and see - if both are close - we will check both port
+// ELSE - we will check 1 port
+// use table: NotStablePortSort 
+// define a percentValue to check if the numbers are close to eachother or not
+/*percentValue = 0.4;
+for (portc = 1, portc <= nrows(NotStablePortSort), portc++,
+	portVar = column (NotStablePortSort, 3)[portc];
+
+	portVar1 = item (1, portVar, "_");
+	port1 = item (1, portVar1, "(");
+	num_val1 = num(item (2, portVar1, "()"));
+	
+	portVar1 = item (2, portVar, "_");
+	port2 = item (1, portVar1, "(");
+	num_val2 = num(item (2, portVar1, "()"));
+	
+	if (num_val2/(num_val1+num_val2) > percentValue,	//we have 2 option for port
+		column (NotStablePortSort, 4)[portc] = port1;
+		column (NotStablePortSort, 5)[portc] = port2;
+		, //ELSE - only one value
+		column (NotStablePortSort, 4)[portc] = port1;
+	);
+);
+//when there is 1 option we want option 2 to be - option 1
+for ( portc = 1, portc <= nrows(NotStablePortSort), portc ++,
+	if (column(NotStablePortSort, 5)[portc] == "",
+		column(NotStablePortSort, 5)[portc] = column(NotStablePortSort, 4)[portc];
+	);
+);*/
+
+NotStablePortSort << save (FolderPath1||"tmp_4.NotStable TestNames with port options.jmp", jmp);
+// split NotStablePortSort to 2 list with ##port (sccording to options)
+/*for (option = 1, option <= 2, option ++,
+	optionDT = new table("OptionDT");
+	optionDT << new column ("TestName_Port", character);
+	optioncol = 4;
+	for ( portc = 1, portc <= nrows (NotStablePortSort), portc ++,
+		optionDT << add row(1);
+		column(optionDT,1)[portc] = column(NotStablePortSort,2)[portc] ||"##"|| column(NotStablePortSort,optioncol)[portc];
+		2
+	);
+	optioncol++;
+	optionDT << save (FolderPath1 || "tmp_NotStable"||char(option)||"_Port.jmp", jmp);
+	SubOP = Stable_list_for_Pyton << Subset(Output Table( "SubOP" ),All rows,Selected columns only( 0 ));
+	for ( combine = 1, combine <= nrows(optionDT), combine++,
+		SubOP << add rows(1);
+		column(SubOP,1)[nrows(SubOP)] = column(optionDT, 1)[combine];
+	);
+	close(optionDT, nosave);
+	SubOP << save (FolderPath||"Combine_Stable_NotStable_"||char(option)||".jmp", jmp);
+	close (SubOP, nosave);
+);*/
+close (NotStablePortSort, nosave);
+
+
+close (Stable_list_for_Pyton, nosave);
+close (SubBin1, nosave);
+
+//close (NotStablePortSort, nosave);
+//////////////////////
+
+close(SummaryBy_vid, nosave);
+close(SummaryDT, nosave);

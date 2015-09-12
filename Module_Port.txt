@@ -1,0 +1,201 @@
+//using System;
+//using System.Collections.Generic;
+//using System.Linq;
+//using System.Text;
+//using System.Threading.Tasks;
+
+//namespace ConsoleApplication1
+//{
+//    using System.Diagnostics;
+//    using System.Globalization;
+
+//    using Trace.Api.Common.TP;
+//    using Trace.Api.Services.BinSwitch.BritaTpProxy;
+//    using Trace.Api.Services.TestProgramParser;
+
+//    class Program
+//    {
+//        static void Main(string[] args)
+//        {
+//            var tpPath = @"C:\Users\isirotin\Desktop\rich\TPL";
+//            var partType = "JD4AXDNV_S";
+
+//            // create a parser
+//            var parser = new CmtTestProgramParserManager();
+            
+//            var sw = Stopwatch.StartNew();
+
+//            // parse the test program
+//            var testProgramObject = parser.ParseTestProgram(tpPath, partType, EnumTpParserFlag.Basic);
+
+//            sw.Stop();
+//            var t = sw.Elapsed;
+//            Console.WriteLine("parsed:{0}", t);
+//            Console.ReadKey();
+
+//            // prepare Brita proxy
+//            var proxy = BritaTpProxyUtils.CreateTpProxyForBrita(testProgramObject);          
+            
+//            Console.WriteLine("brita object ready");
+//            Console.ReadKey();
+
+//            GC.KeepAlive(proxy);
+//        }
+//    }
+//}
+
+namespace DffValue
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.IO;
+    using System.IO.Compression;
+    using System.Linq;
+    using System.Text;
+    using System.Xml;
+    using System.Xml.Linq;
+    using System.Xml.XPath;
+    using Trace.Api.Common;
+    using Trace.Api.Common.BinSwitch;
+    using Trace.Api.Common.Ituff;
+    using Trace.Api.Common.TP;
+    using Trace.Api.Services.BinSwitch;
+    using Trace.Api.Services.Common;
+    using Trace.Api.Services.TestResults.ItuffIndex;
+
+   
+
+    internal class Program
+    {
+        
+
+        private static void Main(string[] args)
+        {
+            //@"C:\Users\isirotin\Desktop\datalogs\data.csv"
+            var targetFile = @"L:\Class\users\SPF\Cross-TP content dependency mapping\FF TestName TP_SKL29EP1Q21538\stability experiment VG2\Results\data10x10.csv";
+
+            ProcessLot("Y532018CR", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR1", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR2", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR3", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR4", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR5", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR6", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR7", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR8", "6881", "CLASSHOT", targetFile);
+            ProcessLot("Y532018CR9", "6881", "CLASSHOT", targetFile);
+
+            return;
+/*            BritaAPI.Decode d = new Decode("3.0", "");
+Classified - 
+ Connect to Trace data bases and collect data
+*/
+        private static IEnumerable<Tuple<string /*test name*/, int /*port number*/>> GetUnitFlow(
+
+            BinSession session,
+            string visualId)
+        {
+            var trace = session.Units[visualId].Trace.Trace;
+
+            foreach (var tuple in trace)
+            {
+                if (tuple.Item1 is TestInstance)
+                {
+                    var testInstance = (TestInstance)tuple.Item1;
+                    yield return new Tuple<string, int>(testInstance.FullName, tuple.Item2);
+                }
+            }
+        }
+ 
+
+
+        private static void ProcessLot(string lot, string operation, string socket, string targetFile)
+        {
+            var session = OpenSessionExample(lot, operation, socket);
+
+            bool isNewFile = !File.Exists(targetFile);
+
+            using (var writer = new StreamWriter(targetFile, true))
+            {
+                if (isNewFile)
+                {
+                    writer.WriteLine("Lot, VisualId,Test,Port, Bin");
+                }
+
+                foreach (var unit in session.Units)
+                {
+                    var data = GetUnitFlow(session, unit.VisualId);
+
+                    foreach (var tuple in data)
+                    {
+                        writer.WriteLine("{3},{0},{1},{2},{4}", unit.VisualId, tuple.Item1, tuple.Item2, lot, unit.ItuffUnit.BinResult);
+                    }
+                }
+            }
+        }
+
+        //private static void ParseTestProgramExample()
+/* 
+
+Classified:
+Trace Parser of datalog
+ 
+*/
+
+        private static BinSession OpenSessionExample(string lot, string operation, string socket)
+        {
+             var siteMapping = new UnixToWindowsMapping();            
+
+             const string ituffIndexPath =
+                 @"\\ger\ec\proj\mdl\ha\intel\cmtdata\prod\trace\Output\PROD_2_1_TEST\CLASS\Indices\ituff_index.zip";
+
+            siteMapping.AddMapping("/nfs/site/disks/mdo_labs_001", @"\\ger\ec\proj\mdl\ha\intel");
+            
+            siteMapping.AddMapping("/nfs/iil/disks/mdo_trace_001", @"\\ger\ec\proj\mdl\ha\intel\cmtdata\prod\trace");
+            siteMapping.AddMapping("/nfs/pdx/disks/mdo_trace_001", @"\\amr\ec\proj\mdl\jf\intel\cmtdata\prod\trace");
+            siteMapping.AddMapping("/nfs/fm/disks/mdo_trace_001", @"\\amr\ec\proj\mdl\fm\intel\cmtdata\prod\trace");
+            siteMapping.AddMapping("/nfs/png/disks/mdo_trace_001", @"\\gar\ec\proj\mdl\pg\intel\cmtdata\prod\trace");
+            siteMapping.AddMapping("/nfs/sc/disks/mdo_trace_001", @"\\amr\ec\proj\mdl\sc\intel\cmtdata\prod\trace");
+            siteMapping.AddMapping("/nfs/cr/disks/mdo_trace_001", @"\\amr\ec\proj\mdl\cr\intel\cmtdata\prod\trace");     
+
+            IDriveMapping m = new BasicDriveMapping(siteMapping);
+            var indexManager = new ItuffIndexManager(m);
+            indexManager.Init(ituffIndexPath);
+           
+            var ituffs = indexManager.Search(lot).Result.Where(
+                i =>
+                    {
+                        var cl = (ClassItuffDefinition)i;
+                        return i.Lot == lot && i.Operation == operation && cl.Hcsl == socket;
+                    }).ToList();                                       
+
+            ituffs[0].TestProgramPath = @"\\ger\ec\proj\ha\mmgbd\Class\users\SPF\Cross-TP content dependency mapping\FF TestName TP_SKL29EP1Q21538\SKL29EP1Q21538\TPL";
+
+            var binSessionFactory = new BinSwitchSessionFactory();
+            var material = new BinSwitchMaterial(
+                TestProgramTypeEnum.Cmt,
+                new[] { (ClassItuffDefinition)ituffs.First() },
+                null,
+                "IDC",
+                "CLASS");
+
+            binSessionFactory.ShouldKeepUnitTraceDataInRuntimeUnit = true;
+
+            var session = binSessionFactory.CreateSession(material);
+
+            // wait for session to load sync
+            session.SessionStartup.Wait();
+
+            return session;
+
+/*
+
+ * Classified: 
+change private variabels of Trace 
+
+ */ 
+
+        }       
+    }
+} 
